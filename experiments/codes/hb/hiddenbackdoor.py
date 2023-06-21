@@ -80,12 +80,16 @@ class HiddenBackdoor(Attack):
 
     def project_onto(self, target_images):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        one_tensor = torch.ones_like(torch.Tensor(target_images.transpose(0, 3, 1, 2))).to(device)
-        # print(self.model.poison_images.shape)
-        # print(target_images.shape)
+        num_dims = 3 if len(self.x_train[0].shape) == 3 else 2
+        if num_dims == 3:
+            target_images = target_images.transpose(0, 3, 1, 2)
+        else:
+            # TODO: if the data is 2D, is transpose needed?
+            pass
+        one_tensor = torch.ones_like(torch.Tensor(target_images)).to(device)
         projected_images = torch.clamp(self.model.poison_images,
-                                       min=torch.Tensor(target_images.transpose(0, 3, 1, 2)).to(device) - one_tensor*self.max_dist,
-                                       max=torch.Tensor(target_images.transpose(0, 3, 1, 2)).to(device) + one_tensor*self.max_dist)\
+                                       min=torch.Tensor(target_images).to(device) - one_tensor*self.max_dist,
+                                       max=torch.Tensor(target_images).to(device) + one_tensor*self.max_dist)\
             .cpu().detach().numpy()
         return projected_images
 
@@ -109,8 +113,6 @@ class HiddenBackdoor(Attack):
         num_dims = 3 if len(self.x_train[0].shape) == 3 else 2
         if num_dims == 3:
             projected_poisons = projected_poisons.transpose(0, 2, 3, 1)
-            # target_images = target_images.transpose(0, 2, 3, 1)
-            # patched_source_images = patched_source_images.transpose(0, 2, 3, 1)
         else:
             pass
             # TODO: if the image has 2 channels, is transpose needed?
