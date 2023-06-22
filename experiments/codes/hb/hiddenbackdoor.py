@@ -22,8 +22,9 @@ class OptimizationModel(nn.Module):
         self.poison_images = nn.Parameter(target_images)
 
     def forward(self, x):
+        num_samples = x.shape[0]
         return ((self.feature_extractor(self.poison_images)[self.layer_name]
-                 - self.feature_extractor(x)[self.layer_name]) ** 2).sum()
+                 - self.feature_extractor(x)[self.layer_name]) ** 2).sum()/num_samples
 
 
 class Attack:
@@ -54,6 +55,7 @@ class HiddenBackdoor(Attack):
         max_dist: maximum tolerable distance between the poison and its corresponding patched image
                   in the feature space
         """
+        self.lr_scheduler = None
         self.target_images = None
         self.patched_source_images = None
         self.x_train = x_train
@@ -97,7 +99,7 @@ class HiddenBackdoor(Attack):
         self.patched_source_images = patched_source_images
         self.target_images = target_images
 
-    def run(self, num_poisons: int, learning_rate: float, epochs: int, min_loss: float):
+    def run(self, num_poisons: int, learning_rate: float, epochs: int, lr_decay: float, lr_decay_step: int, min_loss: float):
         """
         num_poison: the number of poisons you wish to generate
         """
@@ -107,7 +109,7 @@ class HiddenBackdoor(Attack):
             source_images = self.sample_from_source(num_poisons)
             patched_source_images = random_bulk_stamper(source_images, self.patch)
             mapping = np.random.permutation(num_poisons)
-            loss = self.perform_gradient_descent(target_images, patched_source_images, mapping, learning_rate, epochs)
+            loss = self.perform_gradient_descent(target_images, patched_source_images, mapping, learning_rate, epochs, lr_decay, lr_decay_step)
             projected_poisons = self.project_onto(target_images)
             self.model.poison_images = torch.nn.Parameter(torch.Tensor(projected_poisons))
         num_dims = 3 if len(self.x_train[0].shape) == 3 else 2
@@ -119,7 +121,7 @@ class HiddenBackdoor(Attack):
         self.report(target_images, patched_source_images)
         return projected_poisons
 
-    def perform_gradient_descent(self, target_images, patched_source_images, mapping, learning_rate=1, epochs=5):
+    def perform_gradient_descent(self, target_images, patched_source_images, mapping, learning_rate=1, epochs=5, lr_decay=0.95, lr_decay_step=2000):
         """
         returns:
             - loss: the loss for current poison generation process
@@ -136,13 +138,13 @@ class HiddenBackdoor(Attack):
         self.model = OptimizationModel(self.feature_extractor, target_images, self.layer_name)
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = self.model.to(device)
-        # self.opt = torch.optim.SGD(self.model.parameters(), lr=learning_rate)
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08,
-                                    weight_decay=0, amsgrad=False)
+        self.opt = torch.optim.SGD(self.model.parameters(), lr=learning_rate)
+        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self.opt, step_size=lr_decay_step, gamma=lr_decay)
         for i in range(epochs):
             loss = self.model(torch.Tensor(patched_source_images).to(device))
             loss.backward()
             self.opt.step()
             self.opt.zero_grad()
+            self.lr_scheduler.step()
             print(f'\r epoch {i} - loss:{loss}', end='')
         return loss
