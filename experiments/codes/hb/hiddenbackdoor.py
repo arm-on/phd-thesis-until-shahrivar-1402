@@ -146,5 +146,5 @@ class HiddenBackdoor(Attack):
             self.opt.step()
             self.opt.zero_grad()
             self.lr_scheduler.step()
-            print(f'\r epoch {i} - loss:{loss}', end='')
+            print(f'\r epoch {i} - loss: {loss}', end='')
         return loss
