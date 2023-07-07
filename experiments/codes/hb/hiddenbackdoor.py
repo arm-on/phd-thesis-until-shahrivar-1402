@@ -69,8 +69,10 @@ class HiddenBackdoor(Attack):
         self.model_uses_channel_last = model_uses_channel_last
         self.model = None
         self.opt = None
-        self.source_indices = [idx for idx, label in enumerate(self.y_train) if label == self.source]
-        self.target_indices = [idx for idx, label in enumerate(self.y_train) if label == self.target]
+        self.source_indices = [idx for idx, label in enumerate(self.y_train)
+                               if label == self.source]
+        self.target_indices = [idx for idx, label in enumerate(self.y_train)
+                               if label == self.target]
 
     def sample_from_target(self, num_samples: int):
         chosen_indices = np.random.choice(self.target_indices, replace=False, size=num_samples)
